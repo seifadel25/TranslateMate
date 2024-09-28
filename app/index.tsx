@@ -1,24 +1,67 @@
 import { Stack } from 'expo-router';
 import * as Clipboard from 'expo-clipboard';
-import { FlatList, Text, TextInput, StyleSheet, Alert } from 'react-native';
-import { View } from 'react-native';
+import {
+  FlatList,
+  Text,
+  TextInput,
+  StyleSheet,
+  Alert,
+  View,
+  TouchableOpacity,
+  Modal,
+} from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import React, { useState, useEffect, useCallback } from 'react';
 import { languages } from '~/assets/languages';
 import { voiceNameMap } from '~/assets/voiceNameMap';
 import axios from 'axios';
+import 'react-native-get-random-values';
 import { v4 as uuidv4 } from 'uuid';
 import { Audio } from 'expo-av';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
+import { encode } from 'base64-arraybuffer';
 
 export default function Home() {
+  useEffect(() => {
+    (async () => {
+      const { status } = await Audio.requestPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission to access microphone is required!');
+      }
+    })();
+  }, []);
   const styles = StyleSheet.create({
+    modalContainer: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+    },
     container: {
       paddingTop: 20,
       paddingBottom: 20,
       flex: 1,
       justifyContent: 'center',
       flexDirection: 'row',
+    },
+    overlayBackground: {
+      position: 'absolute',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      backgroundColor: 'rgba(0, 0, 0, 0.1)', // Transparent overlay with 30% opacity
+    },
+    languageList: {
+      width: '80%',
+      maxHeight: '70%', // Limits the list height to avoid covering the whole screen
+      backgroundColor: 'rgba(255, 255, 255, 0.9)', // Semi-transparent white background for the list
+      borderRadius: 10,
+    },
+    languageItem: {
+      padding: 16,
+      fontSize: 18,
+      textAlign: 'center',
+      color: 'black',
     },
   });
 
@@ -32,6 +75,8 @@ export default function Home() {
   const [selectLanguageMode, setSelectLanguageMode] = useState<'from' | 'to' | null>(null);
   const [audioUrl, setAudioUrl] = useState('');
   const [isListening, setIsListening] = useState(false);
+  const [recognizedText, setRecognizedText] = useState(''); // Store recognized text
+  const [hasPermission, setHasPermission] = useState(false);
 
   const translateText = useCallback(async () => {
     const subscriptionKey = process.env.EXPO_PUBLIC_Azure_Translate_Key;
@@ -50,7 +95,6 @@ export default function Home() {
       },
       params: {
         'api-version': '3.0',
-        from: languageCodeFrom,
         to: languageCodeTo,
       },
       data: [
@@ -60,8 +104,16 @@ export default function Home() {
       ],
       responseType: 'json',
     }).then(function (response) {
-      console.log(JSON.stringify(response.data, null, 4));
-      setLanguageFrom(response.data[0].detectedLanguage.language);
+      if (!response.data[0].translations[0].text) {
+        console.error('No translation found');
+        return;
+      }
+      console.log(response.data[0].detectedLanguage.language);
+      setLanguageCodeFrom(response.data[0].detectedLanguage.language);
+      setLanguageFrom(
+        languages.find((language) => language.code === response.data[0].detectedLanguage.language)
+          ?.name || 'Checking...'
+      );
       setOutput(response.data[0].translations[0].text);
     });
   }, [input, languageCodeTo]);
@@ -70,7 +122,10 @@ export default function Home() {
     if (input) {
       translateText(); // Trigger translation when input is updated
     }
-  });
+  }, [input]);
+
+  // Initialize Voice listeners
+
   const copyToClipboard = () => {
     if (output) {
       Clipboard.setStringAsync(output);
@@ -81,66 +136,46 @@ export default function Home() {
   };
   if (selectLanguageMode) {
     return (
-      <FlatList
-        className=""
-        data={languages}
-        renderItem={({ item }) => (
-          <Text
-            onPress={() => {
-              if (selectLanguageMode === 'from') {
-                setLanguageFrom(item.name);
-                setLanguageCodeFrom(item.code);
-              } else {
-                setLanguageTo(item.name);
-                setLanguageCodeTo(item.code);
-              }
-              setSelectLanguageMode(null);
-            }}
-            className="p-2 px-5">
-            {item.name}
-          </Text>
-        )}
-      />
+      <Modal
+        transparent={true} // Makes the modal background transparent
+        animationType="fade"
+        visible={selectLanguageMode !== null} // Modal is visible when selectLanguageMode is not null
+        onRequestClose={() => setSelectLanguageMode(null)} // Close modal on back button press (Android)
+      >
+        <View style={styles.modalContainer}>
+          {/* Touchable area outside the list to close the modal */}
+          <TouchableOpacity
+            style={styles.overlayBackground}
+            onPress={() => setSelectLanguageMode(null)} // Close the modal if user taps outside
+          />
+
+          {/* Language selection list */}
+          <FlatList
+            style={styles.languageList}
+            data={languages.filter(
+              (language) => selectLanguageMode === 'from' || language.name !== 'Detect Language'
+            )}
+            renderItem={({ item }) => (
+              <Text
+                onPress={() => {
+                  if (selectLanguageMode === 'from') {
+                    setLanguageFrom(item.name);
+                    setLanguageCodeFrom(item.code);
+                  } else {
+                    setLanguageTo(item.name);
+                    setLanguageCodeTo(item.code);
+                  }
+                  setSelectLanguageMode(null); // Close the modal after selection
+                }}
+                style={styles.languageItem}>
+                {item.name}
+              </Text>
+            )}
+          />
+        </View>
+      </Modal>
     );
   }
-
-  const startSpeechToText = () => {
-    const subscriptionKey = process.env.EXPO_PUBLIC_AZURE_SUB_KEY;
-    const location = 'uaenorth'; // Your Azure region
-
-    if (!subscriptionKey) {
-      console.error('Azure Cognitive Services subscription key is required');
-      return;
-    }
-
-    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, location);
-    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
-
-    // Use the SpeechRecognizer without language auto-detection
-    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
-
-    recognizer.recognizeOnceAsync(
-      (result) => {
-        if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
-          console.log('Recognized: ', result.text);
-          setInput(result.text); // Set the recognized text as the input
-
-          // Automatically translate the recognized text
-          translateText(); // No need to pass the language, Azure Translate will auto-detect
-        } else {
-          console.error('Speech recognition failed:', result.errorDetails);
-        }
-      },
-      (error) => {
-        console.error('Speech recognition error:', error);
-      }
-    );
-  };
-
-  const playAudio = async (audioUrl: any) => {
-    const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true });
-    await sound.playAsync();
-  };
 
   const textToSpeech = async () => {
     const subscriptionKey = process.env.EXPO_PUBLIC_AZURE_SUB_KEY;
@@ -169,15 +204,49 @@ export default function Home() {
         `,
         responseType: 'arraybuffer',
       });
-      // Create a blob URL and set it for playback
-      console.log('Text-to-Speech response:', response);
-      const audioBlob = new Blob([response.data], { type: 'audio/wav' });
-      const audioUrl = URL.createObjectURL(audioBlob);
+      const base64Audio = encode(response.data);
+      const audioUrl = `data:audio/mp3;base64,${base64Audio}`;
       setAudioUrl(audioUrl);
-      playAudio(audioUrl);
+
+      const { sound } = await Audio.Sound.createAsync({ uri: audioUrl }, { shouldPlay: true });
+      await sound.playAsync();
     } catch (error) {
       console.error('Text-to-Speech error:', error);
     }
+  };
+
+  const startSpeechToText = () => {
+    const subscriptionKey = process.env.EXPO_PUBLIC_AZURE_SUB_KEY;
+    const location = 'uaenorth'; // Your Azure region
+
+    if (!subscriptionKey) {
+      console.error('Azure Cognitive Services subscription key is required');
+      return;
+    }
+
+    const speechConfig = SpeechSDK.SpeechConfig.fromSubscription(subscriptionKey, location);
+    const audioConfig = SpeechSDK.AudioConfig.fromDefaultMicrophoneInput();
+
+    // Use the SpeechRecognizer without language auto-detection
+    const recognizer = new SpeechSDK.SpeechRecognizer(speechConfig, audioConfig);
+
+    recognizer.recognizeOnceAsync(
+      (result) => {
+        if (result.reason === SpeechSDK.ResultReason.RecognizedSpeech) {
+          console.log('Recognized: ', result);
+          setInput(result.text); // Set the recognized text as the input
+
+          // Automatically translate the recognized text
+          translateText(); // No need to pass the language, Azure Translate will auto-detect
+        } else {
+          console.error('Speech recognition failed:', result.errorDetails);
+        }
+        recognizer.close();
+      },
+      (error) => {
+        console.error('Speech recognition error:', error);
+      }
+    );
   };
 
   return (
@@ -242,7 +311,7 @@ export default function Home() {
             <View className="flex flex-row justify-between p-6">
               {/* Mic button */}
               <FontAwesome5
-                name="microphone"
+                name={isListening ? 'microphone' : 'microphone-slash'}
                 size={20}
                 className="cursor-pointer text-gray-500"
                 onPress={startSpeechToText}
@@ -252,33 +321,32 @@ export default function Home() {
             </View>
           </View>
           {/* Output */}
-          {output && (
-            <View className="mx-auto w-full rounded-lg bg-gray-300/80 md:w-8/12">
-              <View className="flex flex-row items-baseline justify-between p-6">
-                {/* Output */}
-                <Text className="w-full rounded-lg text-lg font-medium focus:outline-none">
-                  {output}
-                </Text>
-                {/* Play button */}
-              </View>
-              <View className="flex flex-row justify-between p-6">
-                {/* Speaker button */}
-                <FontAwesome5
-                  name="volume-up"
-                  onPress={textToSpeech}
-                  size={20}
-                  className="cursor-pointer text-gray-500"
-                />
-                {/* Copy button */}
-                <FontAwesome5
-                  name="copy"
-                  size={20}
-                  className="cursor-pointer text-gray-500"
-                  onPress={copyToClipboard}
-                />
-              </View>
+
+          <View className="mx-auto w-full rounded-lg bg-gray-300/80 md:w-8/12">
+            <View className="flex flex-row items-baseline justify-between p-6">
+              {/* Output */}
+              <Text className="w-full rounded-lg text-lg font-medium focus:outline-none">
+                {output}
+              </Text>
+              {/* Play button */}
             </View>
-          )}
+            <View className="flex flex-row justify-between p-6">
+              {/* Speaker button */}
+              <FontAwesome5
+                name="volume-up"
+                onPress={textToSpeech}
+                size={20}
+                className="cursor-pointer text-gray-500"
+              />
+              {/* Copy button */}
+              <FontAwesome5
+                name="copy"
+                size={20}
+                className="cursor-pointer text-gray-500"
+                onPress={copyToClipboard}
+              />
+            </View>
+          </View>
         </View>
       </View>
     </>

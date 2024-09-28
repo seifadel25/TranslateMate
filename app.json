@@ -3,8 +3,7 @@
     "name": "TranslateMate",
     "slug": "TranslateMate",
     "version": "1.0.0",
-
-    "scheme": "TranslateMate",
+    "scheme": "translatemate",
     "web": {
       "bundler": "metro",
       "output": "static",
@@ -13,15 +12,11 @@
     "plugins": ["expo-router"],
     "experiments": {
       "typedRoutes": true,
-
       "tsconfigPaths": true
     },
-
     "orientation": "portrait",
     "icon": "./assets/icon.png",
-
     "userInterfaceStyle": "light",
-
     "splash": {
       "image": "./assets/splash.png",
       "resizeMode": "contain",
@@ -29,13 +24,29 @@
     },
     "assetBundlePatterns": ["**/*"],
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "infoPlist": {
+        "NSSpeechRecognitionUsageDescription": "This app uses speech recognition to convert your speech to text.",
+        "NSCameraUsageDescription": "This app uses the camera to let user put a photo in his profile page."
+      }
     },
     "android": {
       "adaptiveIcon": {
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
+      },
+      "permissions": ["android.permission.RECORD_AUDIO", "RECORD_AUDIO"],
+
+      "package": "com.seifadel25.TranslateMate"
+    },
+    "extra": {
+      "router": {
+        "origin": false
+      },
+      "eas": {
+        "projectId": "df0c30b6-7be0-421d-b128-6d6f03326237"
       }
-    }
+    },
+    "owner": "seifadel25"
   }
 }
