@@ -2,10 +2,11 @@
   "extends": "expo/tsconfig.base",
   "compilerOptions": {
     "strict": true,
-
     "baseUrl": ".",
     "paths": {
-      "~/*": ["*"]
+      "~/*": [
+        "*"
+      ]
     }
   },
   "include": [
@@ -15,6 +16,7 @@
     "expo-env.d.ts",
     "app/utility/useSpeechToText.js",
     "app/utility/useTextToSpeach.js",
-    "app/utility/useTranslate.js"
+    "app/utility/useTranslate.js",
+    "nativewind-env.d.ts"
   ]
 }

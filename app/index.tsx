@@ -122,7 +122,7 @@ export default function Home() {
     if (input) {
       translateText(); // Trigger translation when input is updated
     }
-  }, [input]);
+  });
 
   // Initialize Voice listeners
 
@@ -165,7 +165,8 @@ export default function Home() {
                     setLanguageTo(item.name);
                     setLanguageCodeTo(item.code);
                   }
-                  setSelectLanguageMode(null); // Close the modal after selection
+                  setSelectLanguageMode(null);
+                  // Close the modal after selection
                 }}
                 style={styles.languageItem}>
                 {item.name}
