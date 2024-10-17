@@ -20,6 +20,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { Audio } from 'expo-av';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import { encode } from 'base64-arraybuffer';
+import { Analytics } from '@vercel/analytics/react';
 
 export default function Home() {
   useEffect(() => {
@@ -179,6 +180,10 @@ export default function Home() {
   }
 
   const textToSpeech = async () => {
+    if (!output) {
+      console.error('No text to speak');
+      return;
+    }
     const subscriptionKey = process.env.EXPO_PUBLIC_AZURE_SUB_KEY;
     const location = 'uaenorth'; // e.g., 'westus'
     const endpoint = `https://${location}.tts.speech.microsoft.com/cognitiveservices/v1`;
@@ -186,6 +191,7 @@ export default function Home() {
       voiceNameMap.find((voice) => voice.code === languageCodeTo)?.name || 'en-US-AriaNeural';
     const voiceCode =
       voiceNameMap.find((voice) => voice.code === languageCodeTo)?.LangCode || 'en-US';
+
     try {
       const response = await axios({
         url: endpoint,
@@ -217,6 +223,10 @@ export default function Home() {
   };
 
   const startSpeechToText = () => {
+    if (languageFrom === 'Detect Language') {
+      console.error('Please select a language');
+      return;
+    }
     const subscriptionKey = process.env.EXPO_PUBLIC_AZURE_SUB_KEY;
     const location = 'uaenorth'; // Your Azure region
 
@@ -350,6 +360,7 @@ export default function Home() {
           </View>
         </View>
       </View>
+      <Analytics />
     </>
   );
 }
