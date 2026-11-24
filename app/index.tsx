@@ -9,6 +9,7 @@ import {
   View,
   TouchableOpacity,
   Modal,
+  Platform,
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import React, { useState, useEffect, useCallback } from 'react';
@@ -20,9 +21,17 @@ import { v4 as uuidv4 } from 'uuid';
 import { Audio } from 'expo-av';
 import * as SpeechSDK from 'microsoft-cognitiveservices-speech-sdk';
 import { encode } from 'base64-arraybuffer';
-import { Analytics } from '@vercel/analytics/react';
+// Metro (Expo SDK 51) does not resolve package.json "exports" subpaths such as
+// '@vercel/analytics/react', which broke the web build. Use the package's main
+// entry and inject the script on web only.
+import { inject } from '@vercel/analytics';
 
 export default function Home() {
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      inject();
+    }
+  }, []);
   useEffect(() => {
     (async () => {
       const { status } = await Audio.requestPermissionsAsync();
@@ -360,7 +369,6 @@ export default function Home() {
           </View>
         </View>
       </View>
-      <Analytics />
     </>
   );
 }
